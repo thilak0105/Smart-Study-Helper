@@ -207,6 +207,10 @@ pip install googletrans==4.0.0-rc1 pyttsx3 nest_asyncio
 - Add role-based access and progress analytics dashboard
 - Add CI for linting, tests, and migration checks
 
-## 12. License
+## 12.Contributors
+- Teammates:
+- [Bharath Kesav R](https://github.com/bk1210)
+- [Thilak L](https://github.com/thilak0105)
+- [Subramanian G](https://github.com/Demoncyborg07)
+- [Raghul A R](https://github.com/a-steel-heart)
 
-No license file is currently included. Add a LICENSE file (MIT/Apache-2.0/etc.) before public distribution.
