@@ -286,18 +286,6 @@ Key settings in `studyhelper/settings.py`:
 | `USE_POSTGRES` | `false` | Set `true` to switch from SQLite to PostgreSQL |
 | `MEDIA_ROOT` | `media/` | Uploaded files directory — exclude from version control |
 
-### Production Checklist
-
-- [ ] Move `SECRET_KEY` to an environment variable
-- [ ] Set `DEBUG = False`
-- [ ] Configure `ALLOWED_HOSTS` with your domain
-- [ ] Switch to PostgreSQL via `USE_POSTGRES=true`
-- [ ] Set up a production-grade web server (gunicorn + nginx)
-- [ ] Add an async task queue (Celery + Redis) for long PDF processing jobs
-- [ ] Exclude `media/` and `db.sqlite3` from version control
-
----
-
 ## Troubleshooting
 
 **`ImportError: cannot import name X from transformers`**
