@@ -343,6 +343,8 @@ pip install "googletrans==4.0.0rc1" pyttsx3 nest_asyncio
 
 <div align="center">
 
+**⭐ If you found this project useful, please give it a star on GitHub! ⭐**
+
 *Built to make learning accessible for everyone.*
 
 </div>
