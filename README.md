@@ -1,216 +1,348 @@
+<div align="center">
+
 # Smart Study Helper
 
-Smart Study Helper is a Django-based learning assistant designed to help students upload study material (PDF), generate summaries and notes, practice with questions, track streaks, and improve day-to-day study consistency.
+**An AI-powered learning platform built for cognitive accessibility — helping students with ADHD, dyslexia, and learning disabilities study smarter through intelligent summarization, adaptive quizzes, multilingual support, and progress analytics.**
 
-The project was originally built in a hackathon context and is now structured for continued development and deployment.
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Django](https://img.shields.io/badge/Django-5.1-092E20?style=flat-square&logo=django&logoColor=white)](https://djangoproject.com)
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-FFD21F?style=flat-square&logo=huggingface&logoColor=black)](https://huggingface.co)
+[![spaCy](https://img.shields.io/badge/spaCy-NLP-09A3D5?style=flat-square&logo=spacy&logoColor=white)](https://spacy.io)
 
-## 1. Core Capabilities
+[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Tech Stack](#tech-stack) · [Installation](#installation) · [Usage](#usage) · [API Reference](#api-reference) · [Configuration](#configuration) · [Roadmap](#roadmap) · [Contributors](#contributors)
 
-- User authentication with custom user model
-- PDF upload and study material management
-- Automatic text extraction from uploaded PDFs
-- AI-oriented summarization flow with fallback summarizer
-- Notes generation from summaries
-- Question generation from notes (spaCy-driven with safe fallback)
-- Basic streak tracking API endpoint
-- Text-to-speech controls for summary playback
-- PDF translation flow (currently configured for Tamil target language in route usage)
+</div>
 
-## 2. Tech Stack
+---
 
-- Python 3.12
-- Django 5.1.x
-- SQLite (default local development database)
-- Optional PostgreSQL support via environment variables
-- PyPDF2 for PDF text extraction
-- Transformers + T5 model for advanced summarization (optional at runtime)
-- spaCy for question generation (optional at runtime)
-- pyttsx3 for text-to-speech
-- googletrans for translation
+## Overview
 
-## 3. Project Structure
+Smart Study Helper addresses a genuine gap in educational tooling: most learning platforms are built for neurotypical users, leaving students with ADHD, dyslexia, and other cognitive differences without effective study support.
 
-```text
-studyhelper/
+This platform processes uploaded PDF study materials through a multi-stage NLP pipeline — extracting text, generating structured T5-based summaries, breaking content into manageable modules, and producing comprehension quizzes via spaCy NER analysis. Accessibility features including text-to-speech playback and multilingual translation into 7 Indian languages are built in as first-class capabilities, not afterthoughts.
+
+The system is designed with graceful degradation in mind: when heavy ML dependencies (PyTorch, Transformers) are unavailable, it falls back to a pure-Python extractive summarizer and heuristic question generator, ensuring the application remains functional in resource-constrained environments.
+
+---
+
+## Features
+
+### PDF Processing & Summarization
+- Upload any study material PDF via the dashboard
+- PyPDF2 extracts text page-by-page with encoding normalization
+- T5-base transformer generates abstractive summaries using beam search (`num_beams=4`, `max_length=500`, `min_length=150`)
+- Summaries are cleaned, deduplicated, and rendered in both paragraph and bullet-point formats
+- Language is simplified for reduced cognitive load — shorter sentences, plainer vocabulary
+- Fallback: pure-Python extractive summarizer when Torch is unavailable
+
+### Module-Based Learning
+- PDFs are automatically divided into 10-page modules for paced consumption
+- Each module carries a title, sequence number, page range, and estimated completion time (15 min/page)
+- Students progress sequentially through modules at their own pace
+
+### Adaptive Quiz Generation
+- spaCy `en_core_web_sm` generates comprehension questions from study notes using NER, noun chunk extraction, and verb ROOT analysis
+- Question types: named entity questions (`"What is X?"`), verb-based questions (`"How does X affect Y?"`), and concept questions
+- Answers submitted in-platform with immediate scoring and feedback
+- Fallback: lightweight heuristic question generator when spaCy is unavailable
+
+### Text-to-Speech
+- pyttsx3 reads summaries aloud at a configurable speech rate (default: 150 wpm)
+- Start/stop controls exposed via REST API endpoints
+- Designed for auditory learners and students with reading difficulties
+
+### Multilingual Translation
+- Translates extracted PDF text into 7 Indian regional languages: Tamil, Malayalam, Telugu, Kannada, Hindi, Gujarati, Bengali
+- Chunked processing (15,000 chars/chunk) handles long documents without truncation
+
+### Progress Tracking & Streaks
+- Per-user tracking of completed modules, current module position, and rolling average quiz scores
+- Daily streak system with current streak and longest streak counters
+- In-app notifications for study reminders and milestone achievements
+
+### Authentication & User Management
+- Custom Django `AbstractUser` extension with per-user study goals and daily availability settings
+- Full signup, login, logout flow with CSRF protection
+
+---
+
+## Architecture
+
+### Processing Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        User Uploads PDF                      │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+             ┌────────────────┐
+             │  PyPDF2 Text   │
+             │  Extraction    │
+             └───────┬────────┘
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+          ▼                     ▼
+  ┌───────────────┐     ┌───────────────────────────────────┐
+  │Module Splitter│     │       T5 Summarizer (t5-base)      │
+  │10 pages/module│     │  beam search | max_length=500      │
+  │15 min/page est│     │  ↓ fallback: extractive summarizer │
+  └───────────────┘     └──────────────┬────────────────────┘
+                                       │
+                        ┌──────────────┼──────────────┐
+                        │              │               │
+                        ▼              ▼               ▼
+               ┌──────────────┐  ┌─────────┐  ┌─────────────────┐
+               │  pyttsx3 TTS │  │googletrs│  │  spaCy Quiz Gen │
+               │  150 wpm     │  │7 langs  │  │  NER + chunks   │
+               └──────────────┘  └─────────┘  └────────┬────────┘
+                                                        │
+                                                        ▼
+                                              ┌──────────────────┐
+                                              │  User Submits    │
+                                              │  Answers         │
+                                              └────────┬─────────┘
+                                                       │
+                                                       ▼
+                                              ┌──────────────────┐
+                                              │ Progress Update  │
+                                              │ + Streak Refresh │
+                                              └──────────────────┘
+```
+
+### Project Structure
+
+```
+smart-study-helper/
+│
 ├── manage.py
+├── requirements.txt
 ├── README.md
-├── db.sqlite3                  # local runtime database (do not commit in production workflows)
-├── media/                      # uploaded files (runtime data)
-├── study/
-│   ├── admin.py
-│   ├── apps.py
-│   ├── forms.py
-│   ├── models.py
-│   ├── urls.py
-│   ├── views.py
-│   ├── migrations/
-│   ├── templates/
-│   └── static/
-└── studyhelper/
-    ├── settings.py
-    ├── urls.py
-    ├── asgi.py
-    └── wsgi.py
+│
+├── studyhelper/                    # Django project configuration
+│   ├── settings.py                 # Database, installed apps, media config
+│   ├── urls.py                     # Root URL dispatcher
+│   ├── asgi.py
+│   └── wsgi.py
+│
+└── study/                          # Core application
+    ├── models.py                   # All data models (see Data Models section)
+    ├── views.py                    # Request handlers — upload, summarize, TTS, translate, quiz, auth
+    ├── summarizer.py               # T5 summarization module with fallback logic
+    ├── urls.py                     # App-level URL routing
+    ├── forms.py                    # Django form definitions
+    ├── admin.py                    # Admin site registration
+    ├── migrations/                 # Database migration history
+    ├── templates/                  # Django HTML templates (9 pages)
+    └── static/css/                 # Per-page stylesheets (9 files)
 ```
 
-## 4. Application Architecture
+### Data Models
 
-### Main App
+| Model | Purpose |
+|---|---|
+| `CustomUser` | Extended Django user (`AbstractUser`) |
+| `Profile` | Per-user study goal and daily available hours |
+| `StudyMaterial` | Uploaded PDF metadata, extracted text, summary, processing state |
+| `Module` | 10-page content chunk with title, sequence, page range, estimated time |
+| `Quiz` | One quiz instance per module |
+| `Question` | MCQ or True/False question tied to a quiz |
+| `Option` | Answer choice with correctness flag |
+| `QuizAttempt` | Score and timestamp for each attempt |
+| `UserProgress` | Completed modules, current module, rolling average quiz score |
+| `Notification` | Study reminders and milestone alerts |
+| `Streak` | Current streak, longest streak, last active date |
 
-- App name: `study`
-- Project settings package: `studyhelper`
-- Entry point: `manage.py`
+---
 
-### Data Model Highlights
+## Tech Stack
 
-Defined in `study/models.py`:
+| Layer | Technology | Purpose |
+|---|---|---|
+| Backend | Django 5.1 | Web framework, ORM, auth |
+| Database | SQLite (dev) / PostgreSQL (prod) | Relational data storage |
+| ML — Summarization | HuggingFace Transformers, T5-base, PyTorch | Abstractive summary generation |
+| ML — NLP | spaCy `en_core_web_sm` | NER-based quiz question generation |
+| PDF | PyPDF2 | Text extraction from uploaded PDFs |
+| Accessibility | pyttsx3 | Text-to-speech playback |
+| Translation | googletrans | Multilingual content translation |
+| Frontend | Django Templates, HTML/CSS | Server-rendered UI (9 pages) |
 
-- `CustomUser` (extends `AbstractUser`)
-- `Profile` (study goal + available daily time)
-- `StudyMaterial` (uploaded file metadata and summary fields)
-- `Module` (generated chunks/sections of material)
-- `Evaluation` (stored question-answer style evaluation fields)
-- `Quiz`, `Question`, `Option`, `QuizAttempt`
-- `UserProgress`, `Notification`, `Streak`
+---
 
-### Request Flow (High-Level)
-
-1. User signs up/login.
-2. User uploads PDF study material.
-3. System extracts text from PDF.
-4. Summarization attempts T5 model load and generation.
-5. If model dependencies are unavailable, fallback extractive summarizer is used.
-6. Summary is stored and rendered.
-7. Notes/questions can be generated from summary text.
-
-## 5. URL Endpoints
-
-Configured in `study/urls.py`:
-
-- `/` -> dashboard/dummy page
-- `/home/` -> home page
-- `/login/` -> login
-- `/signup/` -> signup
-- `/profile/` -> profile page
-- `/upload_study_material/` -> upload route
-- `/process_study_material/<id>/` -> summarization pipeline
-- `/lessons/<id>/` -> lessons view for a material
-- `/generate_notes/<id>/` -> notes from summary
-- `/questions_form/` -> question generation UI
-- `/submit_answers/` -> answer submission UI
-- `/streaks/` -> streak JSON endpoint
-- `/start_text_to_speech/` -> start TTS
-- `/stop_text_to_speech/` -> stop TTS
-- `/translate_pdf/` -> translation workflow
-
-## 6. Database Configuration
-
-In `studyhelper/settings.py`:
-
-- SQLite is the default for local development.
-- PostgreSQL can be enabled by setting:
-
-```bash
-USE_POSTGRES=true
-POSTGRES_DB=study
-POSTGRES_USER=<your_user>
-POSTGRES_PASSWORD=<your_password>
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-```
-
-## 7. Local Setup
+## Installation
 
 ### Prerequisites
 
 - Python 3.12+
 - pip
-- Optional: virtual environment
+- (Optional) PostgreSQL for production deployments
 
-### Create and Activate Environment
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/thilak0105/smart-study-helper.git
+cd smart-study-helper
+```
+
+### 2. Create and Activate a Virtual Environment
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 ```
 
-### Install Dependencies
+### 3. Install Core Dependencies
 
 ```bash
-pip install django PyPDF2 pyttsx3 googletrans==4.0.0-rc1 nest_asyncio
+pip install django PyPDF2 pyttsx3 "googletrans==4.0.0rc1" nest_asyncio
 ```
 
-Optional advanced NLP/AI dependencies:
+### 4. Install Optional ML/NLP Dependencies
+
+These are required for T5 summarization and spaCy quiz generation. The app runs without them via fallback logic, but quality degrades.
 
 ```bash
 pip install transformers torch spacy
 python -m spacy download en_core_web_sm
 ```
 
-### Run Migrations
+### 5. Configure the Database
 
+**SQLite (default — no config needed):**
 ```bash
 python manage.py migrate
 ```
 
-### Run Development Server
+**PostgreSQL:**
+Set the following environment variables, then run migrations:
+```bash
+export USE_POSTGRES=true
+export POSTGRES_DB=study
+export POSTGRES_USER=<your_user>
+export POSTGRES_PASSWORD=<your_password>
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+
+python manage.py migrate
+```
+
+### 6. Run the Development Server
 
 ```bash
 python manage.py runserver 127.0.0.1:8000
 ```
 
-Open: http://127.0.0.1:8000
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 
-## 8. Known Operational Notes
+---
 
-- If Torch is not available or broken, summary generation falls back to a pure-Python extractive summarizer.
-- If spaCy model is not available, question generation falls back to a lightweight heuristic question generator.
-- Uploaded files are stored under `media/` and should usually be excluded from git.
-- `db.sqlite3` is local runtime state and should not be committed for team workflows.
+## Usage
 
-## 9. Development Recommendations
+1. **Sign up** and log in to your account
+2. **Upload a PDF** from your dashboard — the system auto-processes it in the background
+3. **Read the summary** as paragraphs or bullet points on the Summary page
+4. Press **🔊 Read Aloud** to play the summary via text-to-speech
+5. Go to **Notes** for condensed bullet-point takeaways
+6. Take the **adaptive quiz** generated from your notes
+7. Track your **progress and streaks** on the dashboard
 
-- Move `SECRET_KEY` to environment variables before production deployment.
-- Set `DEBUG=False` and configure `ALLOWED_HOSTS` for production.
-- Add a formal dependency lock file (`requirements.txt` or `pyproject.toml`).
-- Add test coverage for critical flows:
-  - upload + summarize
-  - auth
-  - question generation
-  - translation
+---
 
-## 10. Troubleshooting
+## API Reference
 
-### Error: missing torch dylib / transformers import failure
+All endpoints are relative to the base URL (`http://127.0.0.1:8000` locally).
 
-Use fallback behavior (already supported), or reinstall torch cleanly in your environment.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET/POST` | `/` | Dashboard / dummy index |
+| `GET` | `/home/` | Landing page |
+| `GET/POST` | `/login/` | User login |
+| `GET/POST` | `/signup/` | User registration |
+| `GET` | `/profile/` | User profile and study goal settings |
+| `POST` | `/upload_study_material/` | Upload a PDF study material |
+| `GET` | `/process_study_material/<id>/` | Trigger summarization pipeline for a material |
+| `GET` | `/lessons/<id>/` | Module-by-module lesson view |
+| `GET` | `/generate_notes/<id>/` | Generate bullet-point notes from summary |
+| `GET` | `/questions_form/` | View AI-generated comprehension questions |
+| `POST` | `/submit_answers/` | Submit quiz answers |
+| `GET` | `/streaks/` | JSON endpoint — current and longest streak |
+| `POST` | `/start_text_to_speech/` | Start TTS playback of current summary |
+| `POST` | `/stop_text_to_speech/` | Stop TTS playback |
+| `POST` | `/translate_pdf/` | Translate PDF content to target language |
 
-### Error: PostgreSQL authentication failed
+---
 
-Either:
-- use SQLite default by not setting `USE_POSTGRES`, or
-- correct Postgres credentials in environment variables.
+## Configuration
 
-### Error: missing module (googletrans / pyttsx3 / nest_asyncio)
+Key settings in `studyhelper/settings.py`:
 
-Install missing packages:
+| Setting | Default | Notes |
+|---|---|---|
+| `DEBUG` | `True` | Set `False` in production |
+| `SECRET_KEY` | hardcoded | Move to environment variable before deploying |
+| `ALLOWED_HOSTS` | `[]` | Add your domain/IP for production |
+| `USE_POSTGRES` | `false` | Set `true` to switch from SQLite to PostgreSQL |
+| `MEDIA_ROOT` | `media/` | Uploaded files directory — exclude from version control |
 
+### Production Checklist
+
+- [ ] Move `SECRET_KEY` to an environment variable
+- [ ] Set `DEBUG = False`
+- [ ] Configure `ALLOWED_HOSTS` with your domain
+- [ ] Switch to PostgreSQL via `USE_POSTGRES=true`
+- [ ] Set up a production-grade web server (gunicorn + nginx)
+- [ ] Add an async task queue (Celery + Redis) for long PDF processing jobs
+- [ ] Exclude `media/` and `db.sqlite3` from version control
+
+---
+
+## Troubleshooting
+
+**`ImportError: cannot import name X from transformers`**
+Reinstall torch and transformers cleanly. The app will fall back to extractive summarization automatically if Torch is unavailable.
+
+**`spaCy model not found`**
+Run `python -m spacy download en_core_web_sm`. The app falls back to heuristic question generation if the model is absent.
+
+**`OperationalError: could not connect to server` (PostgreSQL)**
+Either switch back to SQLite (unset `USE_POSTGRES`) or verify your Postgres credentials and ensure the service is running.
+
+**`ModuleNotFoundError: googletrans / pyttsx3 / nest_asyncio`**
 ```bash
-pip install googletrans==4.0.0-rc1 pyttsx3 nest_asyncio
+pip install "googletrans==4.0.0rc1" pyttsx3 nest_asyncio
 ```
 
-## 11. Future Enhancements
+---
 
-- Replace duplicated imports and repeated helper definitions in views with service-layer modules
-- Add API schema and separate frontend template responsibilities
-- Add async task queue for long PDF processing jobs
-- Add role-based access and progress analytics dashboard
-- Add CI for linting, tests, and migration checks
+## Roadmap
 
-## 12.Contributors
-- Teammates:
-- [Bharath Kesav R](https://github.com/bk1210)
-- [Thilak L](https://github.com/thilak0105)
-- [Subramanian G](https://github.com/Demoncyborg07)
-- [Raghul A R](https://github.com/a-steel-heart)
+- [ ] Async task queue (Celery + Redis) for long PDF processing
+- [ ] BERT-based answer evaluation for open-ended quiz responses
+- [ ] Pegasus / BART for higher-quality abstractive summarization
+- [ ] React frontend with richer interactivity and accessibility controls
+- [ ] Spaced repetition system (SRS) for long-term retention
+- [ ] Role-based access and instructor analytics dashboard
+- [ ] Mobile app with offline PDF support
+- [ ] CI pipeline — linting, tests, migration checks
+- [ ] REST API schema (OpenAPI / Swagger)
 
+---
+
+## Contributors
+
+| Name | GitHub |
+|---|---|
+| Thilak L | [@thilak0105](https://github.com/thilak0105) |
+| Bharath Kesav R | [@bk1210](https://github.com/bk1210) |
+| Subramanian G | [@Demoncyborg07](https://github.com/Demoncyborg07) |
+| Raghul A R | [@a-steel-heart](https://github.com/a-steel-heart) |
+
+---
+
+<div align="center">
+
+*Built to make learning accessible for everyone.*
+
+</div>
