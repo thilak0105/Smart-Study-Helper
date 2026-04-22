@@ -1,0 +1,9 @@
+django>=4.0
+psycopg2-binary
+transformers>=4.35.0
+torch>=2.0.0
+spacy>=3.7.0
+PyPDF2>=3.0.0
+pyttsx3>=2.90
+googletrans==4.0.0rc1
+nest-asyncio
